@@ -31,9 +31,6 @@ class Domain:
     
     def __init__(self, fqdn:str, server_ip):
         
-        # Configuration settings
-        self.configDict = json.load(open('config.json'))
-        
         # Domain attributes
         self.threat_assessment = -1
         self.fqdn = fqdn
