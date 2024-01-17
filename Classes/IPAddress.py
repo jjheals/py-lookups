@@ -17,6 +17,12 @@ class IPAddress:
     def lookup(self, save_to_file:str="") -> None: 
         pass
     
+    def to_dict(self) -> dict: 
+        return { 
+            'value': self.value,
+            'version': self.version,
+            'dict': self.dict        
+        }
     
     def __getNetDetails__(self) -> dict:
         try:

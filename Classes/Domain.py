@@ -1,8 +1,3 @@
-import socket 
-import requests 
-import json
-import whois 
-import dns.resolver 
 
 import socket 
 import pandas as pd
@@ -12,16 +7,19 @@ import whois
 import dns.resolver 
 import datetime as dt 
 
+from classes.IPAddress import IPAddress
+from config.Paths import Paths
+
 class Domain: 
     
     threat_assessment:int
     fqdn:str
-    server_ip:str
+    subdomain:str
+    server_ip:IPAddress
     registrar:str
     registrant_country:str
     registrant_name:str 
     creation_date:str
-    server_country:str
     ns_records:list[str]
     mx_records:list[str]
     txt_records:list[str]
@@ -29,23 +27,28 @@ class Domain:
     aaaa_records:list[str]
     asn:int 
     
-    def __init__(self, fqdn:str, server_ip):
+    def __init__(self, fqdn:str, server_ip:IPAddress=None):
         
-        # Domain attributes
+        fqdn = fqdn.rstrip()
+        
+        # Split the domain to get the subdomain
+        split_domain:list[str] = fqdn.split('.')
+        self.fqdn = '.'.join(split_domain[-2:])
+        self.subdomain = '.'.join(split_domain[:-2])
+        
+        # Set other attributes with defaults
         self.threat_assessment = -1
-        self.fqdn = fqdn
         self.server_ip = server_ip
-        self.registrar = "NONE"
-        self.registrant_name = "NONE"
-        self.registrant_country = "NONE"
+        self.registrar = None
+        self.registrant_name = None
+        self.registrant_country = None
         self.creation_date = dt.datetime(year=1900, month=1, day=1)
-        self.server_country = "NONE"
         self.ns_records = []
         self.mx_records = []
         self.txt_records = []
         self.a_records = []
         self.aaaa_records = []
-        self.asn = "NONE"
+        self.asn = None
         self.__getNetDetails__()
         self.__lookup__()
         
@@ -53,11 +56,10 @@ class Domain:
         :return (str) this domain as a properly formatted (meaningful) string
     '''
     def to_string(self) -> str:
-        s:str = f"FQDN: {self.fqdn}\n"
+        s:str = f"Domain: {self.subdomain}.{self.fqdn}\n"
         s += f"\tRegistrar: {self.registrar}\n"
         s += f"\tASN: {self.asn}\n"
-        s += f"\tServer IP: {self.server_ip}\n"
-        s += f"\tServer Country: {self.server_country}\n"
+        s += f"\tServer IP: {self.server_ip.value}\n"
         s += f"\tNS Records: {self.ns_records}\n"
         s += f"\tA Records: {self.a_records}\n"
         s += f"\tMX Records: {self.mx_records}\n"
@@ -67,10 +69,14 @@ class Domain:
         :return (dict) this domain as a properly formatted (meaningful) dictionary
     '''
     def to_dict(self) -> dict:
+        
+        if self.server_ip == None: ip = None
+        else: ip = self.server_ip.to_dict()
+        
         return { 
-            'fqdn': self.fqdn.replace("\u200b", ""),
-            'server-ip': self.server_ip, 
-            'server-country': self.server_country,
+            'fqdn': self.fqdn,
+            'subdomain': self.subdomain,
+            'server-ip': ip, 
             'asn': self.asn,
             'registrar': self.registrar, 
             'registrant-name': self.registrant_name, 
@@ -89,6 +95,8 @@ class Domain:
     '''
     def to_excel_row(self) -> list: 
         lst:list = []
+        
+        # NOTE: add subdomain ? 
         
         lst.append(self.threat_assessment)      # Col 1 - threat_assessment
         lst.append(self.fqdn)                   # Col 2 - fqdn
@@ -115,18 +123,19 @@ class Domain:
             except: existingDf:pd.DataFrame = pd.DataFrame()
             
             # List of the column names 
-            columnNames:list[str] = ['threat_assessment',       # Col 1
-                                    'fqdn',                    # Col 2
-                                    'tld',                     # Col 3
-                                    'server_ip',               # Col 4
-                                    'registrar',               # Col 5
-                                    'asn',                     # Col 6
-                                    'has_mx',                  # Col 7
-                                    'has_a',                   # Col 8
-                                    'registrant_country',      # Col 9
-                                    'creation_date',           # Col 10
-                                    'date_of_lookup'           # Col 11
-                                    ]
+            columnNames:list[str] = [
+                'threat_assessment',       # Col 1
+                'fqdn',                    # Col 2
+                'tld',                     # Col 3
+                'server_ip',               # Col 4
+                'registrar',               # Col 5
+                'asn',                     # Col 6
+                'has_mx',                  # Col 7
+                'has_a',                   # Col 8
+                'registrant_country',      # Col 9
+                'creation_date',           # Col 10
+                'date_of_lookup'           # Col 11
+            ]
             
             newDf:pd.DataFrame = pd.DataFrame([self.to_excel_row()], columns=columnNames) # Create a new dataframe for this domain
             newDf.reset_index(drop=True)                                            # Drop the index col
@@ -230,18 +239,43 @@ class Domain:
     def __getNetDetails__(self) -> None:
         try:
             # Perform DNS lookup to get the server IP address
-            if not self.server_ip:
-                try: self.server_ip = socket.gethostbyname(self.fqdn)
+            if self.server_ip == None:
+                try: 
+                    ip:IPAddress = IPAddress(socket.gethostbyname(self.fqdn))
+                    ip.__getNetDetails__()
+                    self.server_ip = ip
                 except: pass
                 
-            url = f"https://ipinfo.io/{self.server_ip}/"
-            ip_info = requests.get(url)
+            if self.server_ip != None: 
+                url = f"https://ipinfo.io/{self.server_ip.value}/"
+                ip_info = requests.get(url)
             
-            try: self.asn = str(ip_info.json()['org']).split(" ")[0]
-            except: pass
+                try: self.asn = str(ip_info.json()['org']).split(" ")[0]
+                except: pass
             
         except (socket.gaierror, Exception) as e:
             print(f"ERROR in Domain.__getNetDetails__(): {e}")
             return None    
 
 
+class DomainsDict: 
+    
+    domains:dict[str, Domain]
+    
+    def __init__(self, domains:dict={}): 
+        self.domains = domains
+        
+    def dump_json(self, file_path:str=Paths.DOMAINS_JSON, overwrite:bool=True) -> None: 
+        domains_dict:dict[str,dict] = {}
+        
+        if overwrite: 
+            domains_dict = {full_domain:domain.to_dict() for full_domain,domain in self.domains.items()}
+        else: 
+            try: old_data:dict[str,dict] = json.load(open(file_path, "r"))
+            except FileExistsError: old_data = {}
+            
+            for full_domain,domain in self.domains.items():
+                if full_domain in old_data: domains_dict[full_domain] = domain.to_dict()
+                else: domains_dict[full_domain] = self.domains[full_domain].to_dict()
+        
+        json.dump(domains_dict, open(file_path, "w+"), indent=4)
