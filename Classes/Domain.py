@@ -49,10 +49,10 @@ class Domain:
         self.__getNetDetails__()
         self.__lookup__()
         
-    ''' toString() - format the important information for this domain in a meaningful string format to be printed to the terminal
-        :return this domain as a properly formatted (meaningful) string
+    ''' to_string() - format the important information for this domain in a meaningful string format to be printed to the terminal
+        :return (str) this domain as a properly formatted (meaningful) string
     '''
-    def toString(self) -> str:
+    def to_string(self) -> str:
         s:str = f"FQDN: {self.fqdn}\n"
         s += f"\tRegistrar: {self.registrar}\n"
         s += f"\tASN: {self.asn}\n"
@@ -63,8 +63,29 @@ class Domain:
         s += f"\tMX Records: {self.mx_records}\n"
         return s
     
+    ''' to_dict() - format the important information for this domain in a meaningful dictionary format (mainly to store as JSON)
+        :return (dict) this domain as a properly formatted (meaningful) dictionary
+    '''
+    def to_dict(self) -> dict:
+        return { 
+            'fqdn': self.fqdn.replace("\u200b", ""),
+            'server-ip': self.server_ip, 
+            'server-country': self.server_country,
+            'asn': self.asn,
+            'registrar': self.registrar, 
+            'registrant-name': self.registrant_name, 
+            'registrant-country': self.registrant_country, 
+            'creation-date': str(self.creation_date), 
+            'records': {
+                'ns': self.ns_records,
+                'a': self.a_records,
+                'aaaa': self.aaaa_records,
+                'txt': self.txt_records
+            }
+        }
+        
     ''' to_excel_row() - format this domain as a list to be added to a running excel sheet 
-        :return the information for this domain as a list (in the order/format needed by Domain.to_excel()).
+        :return (list[str]) the information for this domain as a list (in the order/format needed by Domain.to_excel()).
     '''
     def to_excel_row(self) -> list: 
         lst:list = []
@@ -84,7 +105,7 @@ class Domain:
         return lst
     
     ''' domain_to_excel(pathToFile) - add this domain to a running sheet 
-        :param pathToFile:str path to the excel file to add the domain to. the file will be created if it does not exist. 
+        :param pathToFile (str) - path to the excel file to add the domain to. the file will be created if it does not exist. 
         :return False if error, True if success
     '''
     def domain_to_excel(self, pathToFile) -> bool:
@@ -120,8 +141,8 @@ class Domain:
             print(e)
             return False
     
-    ''' respToExcel(response) - convert the given response to the respective excel sheets
-        :param response a response from the API
+    ''' records_to_excel(pathToFile) - convert this domain's records to an excel sheet 
+        :param pathToFile (str) - path to the file to save the records to; must be .xlsx; concat data if file already exists, create it if not
         :return bool whether success or not
     ''' 
     def records_to_excel(self, pathToFile) -> bool:        
@@ -194,7 +215,7 @@ class Domain:
         # Get the Txt records 
         try: 
             TxtRecords = dns.resolver.resolve(self.fqdn, 'TXT')
-            for t in TxtRecords: self.txt_records.append(t)
+            for t in TxtRecords: self.txt_records.append(str(t))
         except: pass 
 
         # Get the MX records 
